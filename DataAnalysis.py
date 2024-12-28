@@ -2,11 +2,14 @@
 import re
 from collections import defaultdict
 
-def parse_warehouse_text(text: str) -> dict:
+def parse_warehouse_list(lines: list[str]) -> dict:
     """
-    Parses unstructured text about hardware collected from the warehouse.
+    Parses a list of text lines describing hardware collected from the warehouse.
     Returns a dictionary with the counts of monitors, desktops, laptops, phones,
     bags, chargers, docks, and headsets.
+
+    :param lines: A list of strings, where each string is one line of the unstructured text.
+    :return: A dictionary with aggregated counts per item category.
     """
     # --------------------------------------------------------------------------
     # DATA STRUCTURES FOR FINAL COUNTS
@@ -71,24 +74,19 @@ def parse_warehouse_text(text: str) -> dict:
     # --------------------------------------------------------------------------
     # REGEX / PARSING LOGIC
     # --------------------------------------------------------------------------
-    # We look for patterns like:
-    #   "4 x 5340", "X6 24” screens", "3 x Dell Optiplex 3000", etc.
-    #
-    # We'll do a couple of pattern matches:
-    #   1) A pattern to capture something like "<number> x <text>"
-    #   2) An additional pattern for lines starting with "X<digit>" (e.g. "X6 24” screens")
+    # Patterns to capture item references:
+    #   (1) Lines like "X6 24” screens"
+    #   (2) Lines/phrases like "4 x monitors", "19 x Samsung A35s", etc.
 
     pattern_x_leading = r'^X(\d+)\s+(.*)'           # e.g. "X6 24” screens"
     pattern_generic   = r'(\d+)\s*[x×]\s+([^,;\n]+)' # e.g. "4 x monitors"
-
-    lines = text.split('\n')
 
     for line in lines:
         line_clean = line.strip()
         if not line_clean:
             continue  # skip empty lines
 
-        # 1) Match lines like "X6 24” screens"
+        # (1) Match lines like "X6 24” screens"
         match_x = re.match(pattern_x_leading, line_clean, re.IGNORECASE)
         if match_x:
             num_str, item_str = match_x.groups()
@@ -102,11 +100,11 @@ def parse_warehouse_text(text: str) -> dict:
                 # Could be "X1 3000 - ..." => a 3000 desktop
                 increment_3000_desktops(count_num)
             else:
-                # Extend logic if you have other 'X(...)' patterns
+                # Extend logic if other "X..." patterns are needed
                 pass
             continue
 
-        # 2) Match generic pattern "<number> x <text>"
+        # (2) Match generic pattern "<number> x <text>"
         found_items = re.findall(pattern_generic, line_clean, re.IGNORECASE)
         if found_items:
             for (num_str, raw_item_str) in found_items:
@@ -146,7 +144,7 @@ def parse_warehouse_text(text: str) -> dict:
                     increment_phone(model, count_num)
                     continue
 
-                # If it says "a32", "a34", or "a35" specifically
+                # If it says "a32", "a34", or "a35" specifically (e.g. "Samsung A35s")
                 phone_model_match = re.search(r'a3[245]', item_str_normalized)
                 if phone_model_match:
                     model = phone_model_match.group().upper()  # 'A35'
@@ -182,9 +180,8 @@ def parse_warehouse_text(text: str) -> dict:
                     increment_headset(item_str_normalized, count_num)
                     continue
 
-                # If we reach here, it's something we don't handle or it might be
-                # an asset reference alone. The problem states we only need the asset
-                # number if no model is mentioned. That logic can be added as needed.
+                # If we reach here, it's something we don't handle
+                # or an asset reference alone (which we skip per requirements).
                 pass
         else:
             # No match => handle if needed
@@ -204,43 +201,44 @@ def parse_warehouse_text(text: str) -> dict:
 # EXAMPLE USAGE (if you were to run this module as a script)
 # ------------------------------------------------------------------------------
 if __name__ == "__main__":
-    example_text = """
-    X6 24” screens – MASH @ CJC
-    ==
-    Inventory of Hardware Collected from warehouse  1 x 5540
-      Asset details of devices collected (if required)     Asset 076975
-    ==
-    X1 3000 - nhft-073807
-    ==
-    4 x monitors
-    ==
-    Inventory of Hardware Collected from warehouse  4 x 5340, 4 x small laptop bag, 1 x 100w usb-c charger
-    ...
-    """
-    results = parse_warehouse_text(example_text)
+    example_lines = [
+        "X6 24” screens – MASH @ CJC",
+        "==",
+        "Inventory of Hardware Collected from warehouse  1 x 5540",
+        "  Asset details of devices collected (if required)     Asset 076975",
+        "==",
+        "X1 3000 - nhft-073807",
+        "==",
+        "4 x monitors",
+        "==",
+        "Inventory of Hardware Collected from warehouse  4 x 5340, 4 x small laptop bag, 1 x 100w usb-c charger",
+        # ...
+    ]
+    
+    parsed_results = parse_warehouse_list(example_lines)
 
     print("RESULTS:")
-    print(f"  Monitors: {results['monitors']}")
-    print(f"  Desktops (3000): {results['desktops_3000']}")
+    print(f"  Monitors: {parsed_results['monitors']}")
+    print(f"  Desktops (3000): {parsed_results['desktops_3000']}")
 
     print("  Laptops:")
-    for model, qty in results['laptops'].items():
+    for model, qty in parsed_results['laptops'].items():
         print(f"    {model}: {qty}")
 
     print("  Phones:")
-    for model, qty in results['phones'].items():
+    for model, qty in parsed_results['phones'].items():
         print(f"    {model}: {qty}")
 
     print("  Bags:")
-    for bag_type, qty in results['bags'].items():
+    for bag_type, qty in parsed_results['bags'].items():
         print(f"    {bag_type} bag: {qty}")
 
     print("  Chargers:")
-    for charger_label, qty in results['chargers'].items():
+    for charger_label, qty in parsed_results['chargers'].items():
         print(f"    {charger_label}: {qty}")
 
-    print(f"  Docks: {results['docks']}")
+    print(f"  Docks: {parsed_results['docks']}")
 
     print("  Headsets:")
-    for headset_label, qty in results['headsets'].items():
+    for headset_label, qty in parsed_results['headsets'].items():
         print(f"    {headset_label}: {qty}")

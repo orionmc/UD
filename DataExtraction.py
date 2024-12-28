@@ -69,22 +69,21 @@ def read_outlook_subfolder_stores(mailbox_display_name, subfolder_name):
     messages = subfolder.Items
     # Sort them by ReceivedTime descending (newest first)
     messages.Sort("[ReceivedTime]", True)
-
-    # Read and print the first few emails (e.g. top 5)
-    count_to_read = 5
-    print(f"--- Reading up to {count_to_read} emails from subfolder '{subfolder_name}' in mailbox '{mailbox_display_name}' ---")
+    
+    count_to_read = 5 # Read and print the first few emails (e.g. top 5)
+    #print(f"--- Reading up to {count_to_read} emails from subfolder '{subfolder_name}' in mailbox '{mailbox_display_name}' ---")
     messagebodies = []
     for i, msg in enumerate(messages, start=1):
         try:
-            print(f"Email #{i}")
-            print("  From:   ", msg.SenderName)
-            print("  Received:", msg.ReceivedTime)           
+            #print(f"Email #{i}")
+            #print("  From:   ", msg.SenderName)
+            #print("  Received:", msg.ReceivedTime)           
             raw_body = msg.Body
             body_no_sig = strip_signature(raw_body)
             messagebodies.append(body_no_sig)
 
-            print("  Body (no signature):\n\n", body_no_sig)
-            print("-" * 40)
+            #print("  Body (no signature):\n\n", body_no_sig)
+            #print("-" * 40)
         except Exception as e:
             print("Error reading message:", e)
         if i >= count_to_read:
