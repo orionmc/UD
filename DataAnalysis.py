@@ -1,3 +1,4 @@
+# warehouse_parser.py
 import re
 from collections import defaultdict
 
@@ -5,7 +6,7 @@ def parse_warehouse_list(lines: list[str]) -> dict:
     """
     Parses a list of text lines describing hardware collected from the warehouse.
     Returns a dictionary with the counts of monitors, desktops, laptops, phones,
-    bags, chargers, docks, and headsets.
+    bags, chargers, docks, headsets, and unknown items.
 
     :param lines: A list of strings, where each string is one line of the unstructured text.
     :return: A dictionary with aggregated counts per item category.
@@ -29,6 +30,8 @@ def parse_warehouse_list(lines: list[str]) -> dict:
         'chargers': defaultdict(int),        # e.g., "100w usb-c charger", "130w usb-c charger"
         'docks': 0,                          # Cumulative count of "dock"/"docking stn"
         'headsets': defaultdict(int),        # e.g., "5220 polywire headset"
+
+        'unknown_items': defaultdict(int),    # [NEW] For items not in any defined category
     }
 
     # --------------------------------------------------------------------------
@@ -63,6 +66,11 @@ def parse_warehouse_list(lines: list[str]) -> dict:
         if model not in PHONE_MODELS:
             model = 'A35'  # default per requirement
         counts['phones'][model] += count
+
+    # [NEW] Function to increment unknown items
+    def increment_unknown(item_name: str, count: int):
+        """Add items not in any defined category to unknown_items."""
+        counts['unknown_items'][item_name] += count
 
     def increment_bag(size_label: str, count: int):
         """Add bags. (e.g., 'small laptop bag', 'large laptop bag')"""
@@ -115,13 +123,11 @@ def parse_warehouse_list(lines: list[str]) -> dict:
                     elif model in LAPTOP_MODELS:
                         increment_laptop(model, count_num)
                     else:
-                        # Handle unknown 4-digit models if necessary
-                        pass
-                # [NEW] Check if it mentions a phone model directly (unlikely in "X..." lines)
-                phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
-                if phone_model_match:
-                    model = phone_model_match.group(1).upper()
-                    increment_phone(model, count_num)
+                        # [NEW] If 4-digit model not recognized, add to unknown_items
+                        increment_unknown(item_str_normalized, count_num)
+                else:
+                    # [NEW] If no recognizable pattern, add to unknown_items
+                    increment_unknown(item_str_normalized, count_num)
             continue
 
         # (2) Match generic pattern "<number> x <text>"
@@ -141,8 +147,8 @@ def parse_warehouse_list(lines: list[str]) -> dict:
                     elif model in LAPTOP_MODELS:         # [NEW]
                         increment_laptop(model, count_num)
                     else:
-                        # Handle unknown 4-digit models if necessary
-                        pass
+                        # [NEW] If 4-digit model not recognized, add to unknown_items
+                        increment_unknown(item_str_normalized, count_num)
                     continue
 
                 # Check if it's a phone (look for A32, A34, A35)
@@ -156,15 +162,21 @@ def parse_warehouse_list(lines: list[str]) -> dict:
                     # Check if it includes 'case' to ignore phone cases
                     if 'case' not in item_str_normalized:
                         increment_phone(model, count_num)
+                    else:
+                        # [NEW] If it's a phone case, add to unknown_items
+                        increment_unknown(item_str_normalized, count_num)
                     continue
 
-                # Check if it directly mentions a phone model without the word "phone"
+                # Directly check for phone models without the word "phone"
                 phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
                 if phone_model_match:
                     model = phone_model_match.group(1).upper()
                     # Ensure it's not a case
                     if 'case' not in item_str_normalized:
                         increment_phone(model, count_num)
+                    else:
+                        # [NEW] If it's a phone case, add to unknown_items
+                        increment_unknown(item_str_normalized, count_num)
                     continue
 
                 # Check for "monitor" or "screen"
@@ -179,8 +191,8 @@ def parse_warehouse_list(lines: list[str]) -> dict:
                     elif 'large' in item_str_normalized:
                         increment_bag('large', count_num)
                     else:
-                        # Unknown type of bag
-                        increment_bag('unknown', count_num)
+                        # [NEW] Unknown type of bag, add to unknown_items
+                        increment_unknown(item_str_normalized, count_num)
                     continue
 
                 # Check for chargers
@@ -198,11 +210,11 @@ def parse_warehouse_list(lines: list[str]) -> dict:
                     increment_headset(item_str_normalized, count_num)
                     continue
 
-                # If it doesn't match any known category, handle as needed
-                pass
+                # [NEW] If it doesn't match any known category, add to unknown_items
+                increment_unknown(item_str_normalized, count_num)
         else:
-            # No match => handle if needed
-            pass
+            # [NEW] No match => add entire line to unknown_items
+            increment_unknown(line_clean, 1)
 
     # Convert defaultdicts to regular dicts for a cleaner return object
     counts['desktops'] = dict(counts['desktops'])      # [NEW]
@@ -211,5 +223,6 @@ def parse_warehouse_list(lines: list[str]) -> dict:
     counts['bags'] = dict(counts['bags'])
     counts['chargers'] = dict(counts['chargers'])
     counts['headsets'] = dict(counts['headsets'])
+    counts['unknown_items'] = dict(counts['unknown_items'])  # [NEW]
 
     return counts
