@@ -104,7 +104,7 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     pattern_category_model = r'^(Laptop|PC)\s+(\d{4})$'  # e.g., "Laptop 5666"
 
     # Compile phone model pattern to find models not followed by 'case' or 'cases'
-    phone_pattern = re.compile(r'\b(' + '|'.join(PHONE_MODELS) + r')\b(?!\s*(case|cases))', re.IGNORECASE)
+    phone_pattern = re.compile(r'\b(' + '|'.join(PHONE_MODELS) + r')\b(?!\s*(?:case|cases))', re.IGNORECASE)
 
     for email in email_data:
         body = email.get("body", "")
@@ -274,7 +274,7 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
             # Extract known phone models
             phone_matches = phone_pattern.findall(line_clean)
             for model in phone_matches:
-                model_upper = model.upper()
+                model_upper = model.upper()  # Now 'model' is a string, not a tuple
                 increment_phone(model_upper, 1)
                 parsed = True
                 # Remove the matched model from the line to capture remaining unparsable text
