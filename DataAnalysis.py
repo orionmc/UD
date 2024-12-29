@@ -1,21 +1,25 @@
 # warehouse_parser.py
 import re
 from collections import defaultdict
+from typing import List, Dict, Any
 
-def parse_warehouse_list(lines: list[str]) -> dict:
+def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Parses a list of text lines describing hardware collected from the warehouse.
+    Parses a list of email data dictionaries describing hardware collected from the warehouse.
     Returns a dictionary with the counts of monitors, desktops, laptops, phones,
-    bags, chargers, docks, headsets, and unparsable lines.
+    bags, chargers, docks, headsets, and a list of unparsable lines with sender and time details.
 
-    :param lines: A list of strings, where each string is one line of the unstructured text.
+    :param email_data: A list of dictionaries, each containing:
+                       - "body": str (email body)
+                       - "sender": str (sender's name or email)
+                       - "received_time": str (timestamp of when the email was received)
     :return: A dictionary with aggregated counts per item category and a list of unparsable lines.
     """
-
+    
     # [NEW] Define lists for desktop, laptop, and phone models for flexibility
-    DESKTOP_MODELS = ["3000", "3010"]                  # Add or remove desktop models here
-    LAPTOP_MODELS = ["5340", "5330", "5531", "5540", "5666"]   # Add or remove laptop models here
-    PHONE_MODELS = ["A32", "A34", "A35"]               # Add or remove phone models here
+    DESKTOP_MODELS = ["3000", "3010"]  # Add or remove desktop models here
+    LAPTOP_MODELS = ["5340", "5330", "5531", "5540", "5666"]  # Add or remove laptop models here
+    PHONE_MODELS = ["A32", "A34", "A35"]  # Add or remove phone models here
 
     # --------------------------------------------------------------------------
     # DATA STRUCTURES FOR FINAL COUNTS
@@ -31,7 +35,7 @@ def parse_warehouse_list(lines: list[str]) -> dict:
         'docks': 0,                          # Cumulative count of "dock"/"docking stn"
         'headsets': defaultdict(int),        # e.g., "5220 polywire headset"
 
-        'unparsable_lines': []               # [NEW] List to store entire unparsable lines
+        'unparsable_lines': []               # [NEW] List to store entire unparsable lines with sender and time
     }
 
     # --------------------------------------------------------------------------
@@ -67,10 +71,14 @@ def parse_warehouse_list(lines: list[str]) -> dict:
             model = 'A35'  # default per requirement
         counts['phones'][model] += count
 
-    # [NEW] Function to increment unparsable lines
-    def increment_unparsable(line: str):
-        """Add entire unparsable lines to unparsable_lines list."""
-        counts['unparsable_lines'].append(line)
+    # [NEW] Function to increment unparsable lines with sender and time
+    def increment_unparsable(line: str, sender: str, time: str):
+        """Add entire unparsable lines with sender and time details."""
+        counts['unparsable_lines'].append({
+            'line': line,
+            'sender': sender,
+            'received_time': time
+        })
 
     def increment_bag(size_label: str, count: int):
         """Add bags. (e.g., 'small laptop bag', 'large laptop bag')"""
@@ -93,180 +101,181 @@ def parse_warehouse_list(lines: list[str]) -> dict:
     # --------------------------------------------------------------------------
     # Patterns to capture item references:
     #   (1) Lines like "X6 24” screens"
-    #   (2) Lines/phrases like "4 x monitors", "19 x Samsung A35s", etc.
+    #   (2) Lines like "4 x monitors", "19 x Samsung A35s", etc.
+    #   (3) Lines like "Laptop 5666", "PC x2 3111"
 
     pattern_x_leading = r'^X(\d+)\s+(.*)'           # e.g., "X6 24” screens"
-    pattern_generic   = r'(\d+)\s*[x×]\s+([^,;\n]+)' # e.g., "4 x monitors"
+    pattern_generic   = r'(\d+)\s*[x×]\s+([^,;\n]+)' # e.g., "4 x monitors", "PC x2 3111"
+    pattern_category_model = r'^(Laptop|PC)\s+(\d{4})$'  # e.g., "Laptop 5666"
 
     # [NEW] Compile phone model pattern to find models not followed by 'case' or 'cases'
     phone_pattern = re.compile(r'\b(' + '|'.join(PHONE_MODELS) + r')\b(?!\s*(case|cases))', re.IGNORECASE)
 
-    for line in lines:
-        line_clean = line.strip()
-        if not line_clean:
-            continue  # skip empty lines
+    for email in email_data:
+        body = email.get("body", "")
+        sender = email.get("sender", "Unknown Sender")
+        received_time = email.get("received_time", "Unknown Time")
 
-        parsed = False  # Flag to check if the line has been parsed
+        lines = body.split('\n')
+        for line in lines:
+            line_clean = line.strip()
+            if not line_clean:
+                continue  # skip empty lines
 
-        # (1) Match lines like "X6 24” screens"
-        match_x = re.match(pattern_x_leading, line_clean, re.IGNORECASE)
-        if match_x:
-            num_str, item_str = match_x.groups()
-            count_num = int(num_str)
-            item_str_normalized = normalize_item_name(item_str)
+            parsed = False  # Flag to check if the line has been parsed
 
-            # If it looks like monitors or screens
-            if 'screen' in item_str_normalized or 'monitor' in item_str_normalized:
-                increment_monitors(count_num)
-                parsed = True
-            else:
-                # [NEW] Check if it starts with a known desktop or laptop model
-                four_digit_match = re.match(r'(\d{4})', item_str_normalized)
-                if four_digit_match:
-                    model = four_digit_match.group(1)
-                    if model in DESKTOP_MODELS:
-                        increment_desktop(model, count_num)
-                        parsed = True
-                    elif model in LAPTOP_MODELS:
-                        increment_laptop(model, count_num)
-                        parsed = True
-                    else:
-                        # [NEW] If 4-digit model not recognized, mark as unparsable
-                        increment_unparsable(line_clean)
-                        parsed = True  # Consider the line as handled (unparsable)
-                else:
-                    # [NEW] If no recognizable pattern, mark as unparsable
-                    increment_unparsable(line_clean)
-                    parsed = True  # Consider the line as handled (unparsable)
-            continue  # Move to the next line after processing
-
-        # (2) Match generic pattern "<number> x <text>"
-        found_items = re.findall(pattern_generic, line_clean, re.IGNORECASE)
-        if found_items:
-            for (num_str, raw_item_str) in found_items:
+            # (1) Match lines like "X6 24” screens"
+            match_x = re.match(pattern_x_leading, line_clean, re.IGNORECASE)
+            if match_x:
+                num_str, item_str = match_x.groups()
                 count_num = int(num_str)
-                item_str_normalized = normalize_item_name(raw_item_str)
+                item_str_normalized = normalize_item_name(item_str)
 
-                # Check for 4-digit model first
-                four_digit_match = re.match(r'(\d{4})', item_str_normalized)
-                if four_digit_match:
-                    model = four_digit_match.group(1)
-
-                    if model in DESKTOP_MODELS:          # [NEW]
-                        increment_desktop(model, count_num)
-                        parsed = True
-                    elif model in LAPTOP_MODELS:         # [NEW]
-                        increment_laptop(model, count_num)
-                        parsed = True
+                # If it looks like monitors or screens
+                if 'screen' in item_str_normalized or 'monitor' in item_str_normalized:
+                    increment_monitors(count_num)
+                    parsed = True
+                else:
+                    # [NEW] Check if it starts with a known desktop or laptop model
+                    four_digit_match = re.match(r'(\d{4})', item_str_normalized)
+                    if four_digit_match:
+                        model = four_digit_match.group(1)
+                        if model in DESKTOP_MODELS:
+                            increment_desktop(model, count_num)
+                            parsed = True
+                        elif model in LAPTOP_MODELS:
+                            increment_laptop(model, count_num)
+                            parsed = True
+                        else:
+                            # [NEW] If 4-digit model not recognized, mark as unparsable
+                            increment_unparsable(line_clean, sender, received_time)
+                            parsed = True  # Consider the line as handled (unparsable)
                     else:
-                        # [NEW] If 4-digit model not recognized, mark as unparsable
-                        increment_unparsable(line_clean)
-                        parsed = True
-                    continue  # Move to the next found item
+                        # [NEW] If no recognizable pattern, mark as unparsable
+                        increment_unparsable(line_clean, sender, received_time)
+                        parsed = True  # Consider the line as handled (unparsable)
+                continue  # Move to the next line after processing
 
-                # Check if it's a phone (look for A32, A34, A35)
-                if 'phone' in item_str_normalized:
-                    # Extract phone model if present
+            # (2) Match generic pattern "<number> x <text>"
+            found_items = re.findall(pattern_generic, line_clean, re.IGNORECASE)
+            if found_items:
+                for (num_str, raw_item_str) in found_items:
+                    count_num = int(num_str)
+                    item_str_normalized = normalize_item_name(raw_item_str)
+
+                    # Check for 4-digit model first
+                    four_digit_match = re.match(r'(\d{4})', item_str_normalized)
+                    if four_digit_match:
+                        model = four_digit_match.group(1)
+
+                        if model in DESKTOP_MODELS:          # [NEW]
+                            increment_desktop(model, count_num)
+                            parsed = True
+                        elif model in LAPTOP_MODELS:         # [NEW]
+                            increment_laptop(model, count_num)
+                            parsed = True
+                        else:
+                            # [NEW] If 4-digit model not recognized, mark as unparsable
+                            increment_unparsable(line_clean, sender, received_time)
+                            parsed = True
+                        continue  # Move to the next found item
+
+                    # Check if it's a phone (look for A32, A34, A35)
+                    if 'phone' in item_str_normalized:
+                        # Extract phone model if present
+                        phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
+                        if phone_model_match:
+                            model = phone_model_match.group(1).upper()
+                        else:
+                            model = 'A35'  # default
+                        # Check if it includes 'case' to ignore phone cases
+                        if 'case' not in item_str_normalized:
+                            increment_phone(model, count_num)
+                            parsed = True
+                        else:
+                            # [NEW] If it's a phone case, mark as unparsable
+                            increment_unparsable(line_clean, sender, received_time)
+                            parsed = True
+                        continue  # Move to the next found item
+
+                    # Directly check for phone models without the word "phone"
                     phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
                     if phone_model_match:
                         model = phone_model_match.group(1).upper()
-                    else:
-                        model = 'A35'  # default
-                    # Check if it includes 'case' to ignore phone cases
-                    if 'case' not in item_str_normalized:
-                        increment_phone(model, count_num)
-                        parsed = True
-                    else:
-                        # [NEW] If it's a phone case, mark as unparsable
-                        increment_unparsable(line_clean)
-                        parsed = True
-                    continue  # Move to the next found item
+                        # Ensure it's not a case
+                        if 'case' not in item_str_normalized:
+                            increment_phone(model, count_num)
+                            parsed = True
+                        else:
+                            # [NEW] If it's a phone case, mark as unparsable
+                            increment_unparsable(line_clean, sender, received_time)
+                            parsed = True
+                        continue  # Move to the next found item
 
-                # Directly check for phone models without the word "phone"
-                phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
-                if phone_model_match:
-                    model = phone_model_match.group(1).upper()
-                    # Ensure it's not a case
-                    if 'case' not in item_str_normalized:
-                        increment_phone(model, count_num)
+                    # Check for "monitor" or "screen"
+                    if 'monitor' in item_str_normalized or 'screen' in item_str_normalized:
+                        increment_monitors(count_num)
                         parsed = True
-                    else:
-                        # [NEW] If it's a phone case, mark as unparsable
-                        increment_unparsable(line_clean)
-                        parsed = True
-                    continue  # Move to the next found item
+                        continue  # Move to the next found item
 
-                # Check for "monitor" or "screen"
-                if 'monitor' in item_str_normalized or 'screen' in item_str_normalized:
-                    increment_monitors(count_num)
+                    # Check for "bag"
+                    if 'bag' in item_str_normalized:
+                        if 'small' in item_str_normalized:
+                            increment_bag('small', count_num)
+                            parsed = True
+                        elif 'large' in item_str_normalized:
+                            increment_bag('large', count_num)
+                            parsed = True
+                        else:
+                            # [NEW] Unknown type of bag, mark as unparsable
+                            increment_unparsable(line_clean, sender, received_time)
+                            parsed = True
+                        continue  # Move to the next found item
+
+                    # Check for chargers
+                    if 'charger' in item_str_normalized:
+                        increment_charger(item_str_normalized, count_num)
+                        parsed = True
+                        continue  # Move to the next found item
+
+                    # Check for dock/docking station
+                    if 'dock' in item_str_normalized:
+                        increment_dock(count_num)
+                        parsed = True
+                        continue  # Move to the next found item
+
+                    # Check for headset
+                    if 'headset' in item_str_normalized:
+                        increment_headset(item_str_normalized, count_num)
+                        parsed = True
+                        continue  # Move to the next found item
+
+                    # [NEW] If it doesn't match any known category, mark as unparsable
+                    increment_unparsable(line_clean, sender, received_time)
                     parsed = True
-                    continue  # Move to the next found item
+                continue  # Move to the next line after processing all found items
 
-                # Check for "bag"
-                if 'bag' in item_str_normalized:
-                    if 'small' in item_str_normalized:
-                        increment_bag('small', count_num)
-                        parsed = True
-                    elif 'large' in item_str_normalized:
-                        increment_bag('large', count_num)
-                        parsed = True
-                    else:
-                        # [NEW] Unknown type of bag, mark as unparsable
-                        increment_unparsable(line_clean)
-                        parsed = True
-                    continue  # Move to the next found item
+            # (3) Match category and model pattern, e.g., "Laptop 5666"
+            match_category_model = re.match(pattern_category_model, line_clean, re.IGNORECASE)
+            if match_category_model:
+                category, model = match_category_model.groups()
+                category = category.lower()
+                model = model.strip()
 
-                # Check for chargers
-                if 'charger' in item_str_normalized:
-                    increment_charger(item_str_normalized, count_num)
+                if category == 'laptop' and model in LAPTOP_MODELS:
+                    increment_laptop(model, 1)
                     parsed = True
-                    continue  # Move to the next found item
-
-                # Check for dock/docking station
-                if 'dock' in item_str_normalized:
-                    increment_dock(count_num)
+                elif category == 'pc' and model in DESKTOP_MODELS:
+                    increment_desktop(model, 1)
                     parsed = True
-                    continue  # Move to the next found item
-
-                # Check for headset
-                if 'headset' in item_str_normalized:
-                    increment_headset(item_str_normalized, count_num)
+                else:
+                    # [NEW] If model not recognized, mark as unparsable
+                    increment_unparsable(line_clean, sender, received_time)
                     parsed = True
-                    continue  # Move to the next found item
+                continue  # Move to the next line after processing
 
-                # [NEW] If it doesn't match any known category, mark as unparsable
-                increment_unparsable(line_clean)
-                parsed = True
-            continue  # Move to the next line after processing all found items
-
-        # [NEW] If no patterns matched, attempt to detect known models without counts
-        # Search for phone models not preceded by counts
-        phone_matches = phone_pattern.findall(line_clean)
-        if phone_matches:
-            for model_tuple in phone_matches:
-                model = model_tuple[0].upper()
-                increment_phone(model, 1)  # [NEW] Assign a default count of 1
-                parsed = True
-
-        # [NEW] Additionally, scan for known laptop and desktop models without counts
-        # Handle laptops
-        for model in LAPTOP_MODELS:
-            if re.search(r'\b' + re.escape(model) + r'\b', line_clean):
-                counts['laptops'][model] += 1
-                parsed = True
-
-        # Handle desktops
-        for model in DESKTOP_MODELS:
-            if re.search(r'\b' + re.escape(model) + r'\b', line_clean):
-                counts['desktops'][model] += 1
-                parsed = True
-
-        # [NEW] If the line has been parsed, continue to the next line
-        if parsed:
-            continue
-
-        # [NEW] If the line couldn't be parsed, mark it as unparsable
-        increment_unparsable(line_clean)
+            # [NEW] If no patterns matched, mark the line as unparsable
+            increment_unparsable(line_clean, sender, received_time)
 
     # Convert defaultdicts to regular dicts for a cleaner return object
     counts['desktops'] = dict(counts['desktops'])      # [NEW]
