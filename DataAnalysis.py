@@ -4,20 +4,26 @@ from collections import defaultdict
 from typing import List, Dict, Any
 
 def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-    # Parses a list of email data dictionaries describing hardware collected from the warehouse.
-    # Returns a dictionary with the counts of items describet in the list, and a list of unparsable lines with sender and time stamp.
-    # param email_data: A list of dictionaries, each containing:
-    #   "body": str (email body)
-    #   "sender": str (sender's name or email)
-    #   "received_time": str (timestamp of when the email was received)
-    # return: A dictionary with aggregated counts per item category and a list of unparsable lines.
+    """
+    Parses a list of email data dictionaries describing hardware collected from the warehouse.
+    Returns a dictionary with the counts of monitors, desktops, laptops, phones,
+    bags, chargers, docks, headsets, and a list of unparsable lines with sender and time details.
+
+    :param email_data: A list of dictionaries, each containing:
+                       - "body": str (email body)
+                       - "sender": str (sender's name or email)
+                       - "received_time": str (timestamp of when the email was received)
+    :return: A dictionary with aggregated counts per item category and a list of unparsable lines.
+    """
+    
     # Define lists for desktop, laptop, and phone models for flexibility and future tuning
     DESKTOP_MODELS = ["3000", "3010"]  
     LAPTOP_MODELS = ["5340", "5330", "5531", "5540", "5666"]  
-    PHONE_MODELS = ["A32", "A34", "A35"]  
-
+    PHONE_MODELS = ["A32", "A34", "A35", "S23"]  
+    
+    # --------------------------------------------------------------------------
     # DATA STRUCTURES FOR FINAL COUNTS
-
+    # --------------------------------------------------------------------------
     counts = {
         'monitors': 0,                       # e.g., "4 x monitors", "X6 24” screens"
         'desktops': defaultdict(int),        # For recognized desktop models
@@ -44,17 +50,14 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Add monitors (screens) to the total count."""
         counts['monitors'] += count
 
-    # [NEW] Function to increment desktop counts based on model
     def increment_desktop(model: str, count: int):
         """Increment a recognized desktop model."""
         counts['desktops'][model] += count
 
-    # [NEW] Function to increment laptop counts based on model
     def increment_laptop(model: str, count: int):
         """Increment a recognized laptop model."""
         counts['laptops'][model] += count
 
-    # [NEW] Function to increment phone counts based on model
     def increment_phone(model: str, count: int):
         """
         Add phones by model (e.g., A32, A34, A35).
@@ -64,7 +67,6 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
             model = 'A35'  # default per requirement
         counts['phones'][model] += count
 
-    # [NEW] Function to increment unparsable lines with sender and time
     def increment_unparsable(line: str, sender: str, time: str):
         """Add entire unparsable lines with sender and time details."""
         counts['unparsable_lines'].append({
@@ -101,7 +103,7 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     pattern_generic   = r'(\d+)\s*[x×]\s+([^,;\n]+)' # e.g., "4 x monitors", "PC x2 3111"
     pattern_category_model = r'^(Laptop|PC)\s+(\d{4})$'  # e.g., "Laptop 5666"
 
-    # [NEW] Compile phone model pattern to find models not followed by 'case' or 'cases'
+    # Compile phone model pattern to find models not followed by 'case' or 'cases'
     phone_pattern = re.compile(r'\b(' + '|'.join(PHONE_MODELS) + r')\b(?!\s*(case|cases))', re.IGNORECASE)
 
     for email in email_data:
@@ -129,7 +131,7 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                     increment_monitors(count_num)
                     parsed = True
                 else:
-                    # [NEW] Check if it starts with a known desktop or laptop model
+                    # Check if it starts with a known desktop or laptop model
                     four_digit_match = re.match(r'(\d{4})', item_str_normalized)
                     if four_digit_match:
                         model = four_digit_match.group(1)
@@ -140,11 +142,11 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                             increment_laptop(model, count_num)
                             parsed = True
                         else:
-                            # [NEW] If 4-digit model not recognized, mark as unparsable
+                            # If 4-digit model not recognized, mark as unparsable
                             increment_unparsable(line_clean, sender, received_time)
                             parsed = True  # Consider the line as handled (unparsable)
                     else:
-                        # [NEW] If no recognizable pattern, mark as unparsable
+                        # If no recognizable pattern, mark as unparsable
                         increment_unparsable(line_clean, sender, received_time)
                         parsed = True  # Consider the line as handled (unparsable)
                 continue  # Move to the next line after processing
@@ -161,22 +163,22 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                     if four_digit_match:
                         model = four_digit_match.group(1)
 
-                        if model in DESKTOP_MODELS:          # [NEW]
+                        if model in DESKTOP_MODELS:
                             increment_desktop(model, count_num)
                             parsed = True
-                        elif model in LAPTOP_MODELS:         # [NEW]
+                        elif model in LAPTOP_MODELS:
                             increment_laptop(model, count_num)
                             parsed = True
                         else:
-                            # [NEW] If 4-digit model not recognized, mark as unparsable
+                            # If 4-digit model not recognized, mark as unparsable
                             increment_unparsable(line_clean, sender, received_time)
                             parsed = True
                         continue  # Move to the next found item
 
-                    # Check if it's a phone (look for A32, A34, A35)
+                    # Check if it's a phone (look for A32, A34, A35, S23)
                     if 'phone' in item_str_normalized:
                         # Extract phone model if present
-                        phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
+                        phone_model_match = re.search(r'\b(a3[245]|s23)\b', item_str_normalized, re.IGNORECASE)
                         if phone_model_match:
                             model = phone_model_match.group(1).upper()
                         else:
@@ -186,13 +188,13 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                             increment_phone(model, count_num)
                             parsed = True
                         else:
-                            # [NEW] If it's a phone case, mark as unparsable
+                            # If it's a phone case, mark as unparsable
                             increment_unparsable(line_clean, sender, received_time)
                             parsed = True
                         continue  # Move to the next found item
 
                     # Directly check for phone models without the word "phone"
-                    phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
+                    phone_model_match = re.search(r'\b(a3[245]|s23)\b', item_str_normalized, re.IGNORECASE)
                     if phone_model_match:
                         model = phone_model_match.group(1).upper()
                         # Ensure it's not a case
@@ -200,7 +202,7 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                             increment_phone(model, count_num)
                             parsed = True
                         else:
-                            # [NEW] If it's a phone case, mark as unparsable
+                            # If it's a phone case, mark as unparsable
                             increment_unparsable(line_clean, sender, received_time)
                             parsed = True
                         continue  # Move to the next found item
@@ -220,7 +222,7 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                             increment_bag('large', count_num)
                             parsed = True
                         else:
-                            # [NEW] Unknown type of bag, mark as unparsable
+                            # Unknown type of bag, mark as unparsable
                             increment_unparsable(line_clean, sender, received_time)
                             parsed = True
                         continue  # Move to the next found item
@@ -243,7 +245,7 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                         parsed = True
                         continue  # Move to the next found item
 
-                    # [NEW] If it doesn't match any known category, mark as unparsable
+                    # If it doesn't match any known category, mark as unparsable
                     increment_unparsable(line_clean, sender, received_time)
                     parsed = True
                 continue  # Move to the next line after processing all found items
@@ -262,21 +264,52 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                     increment_desktop(model, 1)
                     parsed = True
                 else:
-                    # [NEW] If model not recognized, mark as unparsable
+                    # If model not recognized, mark as unparsable
                     increment_unparsable(line_clean, sender, received_time)
                     parsed = True
                 continue  # Move to the next line after processing
 
-            # [NEW] If no patterns matched, mark the line as unparsable
-            increment_unparsable(line_clean, sender, received_time)
+            # (4) If no patterns matched, attempt to extract known models within the line
+            # and mark the remaining as unparsable
+            # Extract known phone models
+            phone_matches = phone_pattern.findall(line_clean)
+            for model in phone_matches:
+                model_upper = model.upper()
+                increment_phone(model_upper, 1)
+                parsed = True
+                # Remove the matched model from the line to capture remaining unparsable text
+                line_clean = re.sub(r'\b' + re.escape(model) + r'\b', '', line_clean, flags=re.IGNORECASE)
+
+            # Extract known desktop and laptop models
+            for model in DESKTOP_MODELS:
+                if re.search(r'\b' + re.escape(model) + r'\b', line_clean):
+                    increment_desktop(model, 1)
+                    parsed = True
+                    # Remove the matched model from the line
+                    line_clean = re.sub(r'\b' + re.escape(model) + r'\b', '', line_clean)
+
+            for model in LAPTOP_MODELS:
+                if re.search(r'\b' + re.escape(model) + r'\b', line_clean):
+                    increment_laptop(model, 1)
+                    parsed = True
+                    # Remove the matched model from the line
+                    line_clean = re.sub(r'\b' + re.escape(model) + r'\b', '', line_clean)
+
+            # After extracting known models, if there's any remaining text, mark as unparsable
+            if parsed and line_clean.strip():
+                increment_unparsable(line_clean.strip(), sender, received_time)
+
+            # If nothing was parsed, mark the entire line as unparsable
+            if not parsed and line_clean:
+                increment_unparsable(line_clean, sender, received_time)
 
     # Convert defaultdicts to regular dicts for a cleaner return object
-    counts['desktops'] = dict(counts['desktops'])      # [NEW]
-    counts['laptops'] = dict(counts['laptops'])        # [NEW]
-    counts['phones'] = dict(counts['phones'])          # [NEW]
-    counts['bags'] = dict(counts['bags'])
-    counts['chargers'] = dict(counts['chargers'])
-    counts['headsets'] = dict(counts['headsets'])
+    counts['desktops'] = dict(counts['desktops'])      # Convert defaultdict to dict
+    counts['laptops'] = dict(counts['laptops'])        # Convert defaultdict to dict
+    counts['phones'] = dict(counts['phones'])          # Convert defaultdict to dict
+    counts['bags'] = dict(counts['bags'])              # Convert defaultdict to dict
+    counts['chargers'] = dict(counts['chargers'])      # Convert defaultdict to dict
+    counts['headsets'] = dict(counts['headsets'])      # Convert defaultdict to dict
     # 'unparsable_lines' remains a list
 
     return counts
