@@ -1,4 +1,3 @@
-# warehouse_parser.py
 import re
 from collections import defaultdict
 
@@ -11,18 +10,25 @@ def parse_warehouse_list(lines: list[str]) -> dict:
     :param lines: A list of strings, where each string is one line of the unstructured text.
     :return: A dictionary with aggregated counts per item category.
     """
+
+    # [NEW] Define lists for desktop, laptop, and phone models for flexibility
+    DESKTOP_MODELS = ["3000", "3010"]                  # Add or remove desktop models here
+    LAPTOP_MODELS = ["5340", "5330", "5531", "5540"]   # Add or remove laptop models here
+    PHONE_MODELS = ["A32", "A34", "A35"]               # Add or remove phone models here
+
     # --------------------------------------------------------------------------
     # DATA STRUCTURES FOR FINAL COUNTS
     # --------------------------------------------------------------------------
     counts = {
-        'monitors': 0,                      # e.g. "4 x monitors", "X6 24” screens"
-        'desktops_3000': 0,                 # e.g. "X1 3000", "Dell Optiplex 3000"
-        'laptops': defaultdict(int),        # key = 4-digit model, value = count
-        'phones': defaultdict(int),         # key = phone model (A32, A34, A35), value = count
-        'bags': defaultdict(int),           # e.g. "small laptop bag", "large laptop bag"
-        'chargers': defaultdict(int),       # e.g. "100w usb-c charger", "130w usb-c charger"
-        'docks': 0,                         # cumulative count of "dock"/"docking stn"
-        'headsets': defaultdict(int),       # e.g. "5220 polywire headset"
+        'monitors': 0,                       # e.g., "4 x monitors", "X6 24” screens"
+
+        'desktops': defaultdict(int),        # [NEW] For recognized desktop models
+        'laptops': defaultdict(int),         # [NEW] For recognized laptop models
+        'phones': defaultdict(int),          # [NEW] For recognized phone models
+        'bags': defaultdict(int),            # e.g., "small laptop bag", "large laptop bag"
+        'chargers': defaultdict(int),        # e.g., "100w usb-c charger", "130w usb-c charger"
+        'docks': 0,                          # Cumulative count of "dock"/"docking stn"
+        'headsets': defaultdict(int),        # e.g., "5220 polywire headset"
     }
 
     # --------------------------------------------------------------------------
@@ -38,29 +44,32 @@ def parse_warehouse_list(lines: list[str]) -> dict:
         """Add monitors (screens) to the total count."""
         counts['monitors'] += count
 
-    def increment_3000_desktops(count: int):
-        """Add to the total count of '3000' desktops."""
-        counts['desktops_3000'] += count
+    # [NEW] Function to increment desktop counts based on model
+    def increment_desktop(model: str, count: int):
+        """Increment a recognized desktop model."""
+        counts['desktops'][model] += count
 
+    # [NEW] Function to increment laptop counts based on model
     def increment_laptop(model: str, count: int):
-        """Add laptops by their 4-digit model."""
+        """Increment a recognized laptop model."""
         counts['laptops'][model] += count
 
+    # [NEW] Function to increment phone counts based on model
     def increment_phone(model: str, count: int):
         """
-        Add phones by model (A32, A34, A35).
-        If model not given, default to A35.
+        Add phones by model (e.g., A32, A34, A35).
+        If model not given or unrecognized, default to A35.
         """
-        if model not in ['A32', 'A34', 'A35']:
+        if model not in PHONE_MODELS:
             model = 'A35'  # default per requirement
         counts['phones'][model] += count
 
     def increment_bag(size_label: str, count: int):
-        """Add bags. (e.g. 'small laptop bag', 'large laptop bag')"""
+        """Add bags. (e.g., 'small laptop bag', 'large laptop bag')"""
         counts['bags'][size_label] += count
 
     def increment_charger(label: str, count: int):
-        """Add charger counts (e.g. '100w usb-c charger')."""
+        """Add charger counts (e.g., '100w usb-c charger')."""
         counts['chargers'][label] += count
 
     def increment_dock(count: int):
@@ -68,7 +77,7 @@ def parse_warehouse_list(lines: list[str]) -> dict:
         counts['docks'] += count
 
     def increment_headset(label: str, count: int):
-        """Add headset count (e.g. '5220 polywire headset')."""
+        """Add headset count (e.g., '5220 polywire headset')."""
         counts['headsets'][label] += count
 
     # --------------------------------------------------------------------------
@@ -78,8 +87,8 @@ def parse_warehouse_list(lines: list[str]) -> dict:
     #   (1) Lines like "X6 24” screens"
     #   (2) Lines/phrases like "4 x monitors", "19 x Samsung A35s", etc.
 
-    pattern_x_leading = r'^X(\d+)\s+(.*)'           # e.g. "X6 24” screens"
-    pattern_generic   = r'(\d+)\s*[x×]\s+([^,;\n]+)' # e.g. "4 x monitors"
+    pattern_x_leading = r'^X(\d+)\s+(.*)'           # e.g., "X6 24” screens"
+    pattern_generic   = r'(\d+)\s*[x×]\s+([^,;\n]+)' # e.g., "4 x monitors"
 
     for line in lines:
         line_clean = line.strip()
@@ -96,12 +105,23 @@ def parse_warehouse_list(lines: list[str]) -> dict:
             # If it looks like monitors or screens
             if 'screen' in item_str_normalized or 'monitor' in item_str_normalized:
                 increment_monitors(count_num)
-            elif '3000' in item_str_normalized:
-                # Could be "X1 3000 - ..." => a 3000 desktop
-                increment_3000_desktops(count_num)
             else:
-                # Extend logic if other "X..." patterns are needed
-                pass
+                # [NEW] Check if it starts with a known desktop or laptop model
+                four_digit_match = re.match(r'(\d{4})', item_str_normalized)
+                if four_digit_match:
+                    model = four_digit_match.group(1)
+                    if model in DESKTOP_MODELS:
+                        increment_desktop(model, count_num)
+                    elif model in LAPTOP_MODELS:
+                        increment_laptop(model, count_num)
+                    else:
+                        # Handle unknown 4-digit models if necessary
+                        pass
+                # [NEW] Check if it mentions a phone model directly (unlikely in "X..." lines)
+                phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
+                if phone_model_match:
+                    model = phone_model_match.group(1).upper()
+                    increment_phone(model, count_num)
             continue
 
         # (2) Match generic pattern "<number> x <text>"
@@ -111,46 +131,45 @@ def parse_warehouse_list(lines: list[str]) -> dict:
                 count_num = int(num_str)
                 item_str_normalized = normalize_item_name(raw_item_str)
 
-                # Check if "Dell Optiplex 3000"
-                if 'dell optiplex 3000' in item_str_normalized:
-                    increment_3000_desktops(count_num)
-                    continue
-
-                # Check for 4-digit laptop models (e.g. 5340, 5540, 5531)
+                # Check for 4-digit model first
                 four_digit_match = re.match(r'(\d{4})', item_str_normalized)
                 if four_digit_match:
-                    laptop_model = four_digit_match.group(1)
-                    increment_laptop(laptop_model, count_num)
+                    model = four_digit_match.group(1)
+
+                    if model in DESKTOP_MODELS:          # [NEW]
+                        increment_desktop(model, count_num)
+                    elif model in LAPTOP_MODELS:         # [NEW]
+                        increment_laptop(model, count_num)
+                    else:
+                        # Handle unknown 4-digit models if necessary
+                        pass
                     continue
 
-                # If it specifically says "3000" (but not "dell optiplex 3000")
-                if '3000' in item_str_normalized:
-                    increment_3000_desktops(count_num)
+                # Check if it's a phone (look for A32, A34, A35)
+                if 'phone' in item_str_normalized:
+                    # Extract phone model if present
+                    phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
+                    if phone_model_match:
+                        model = phone_model_match.group(1).upper()
+                    else:
+                        model = 'A35'  # default
+                    # Check if it includes 'case' to ignore phone cases
+                    if 'case' not in item_str_normalized:
+                        increment_phone(model, count_num)
+                    continue
+
+                # Check if it directly mentions a phone model without the word "phone"
+                phone_model_match = re.search(r'\b(a3[245])\b', item_str_normalized)
+                if phone_model_match:
+                    model = phone_model_match.group(1).upper()
+                    # Ensure it's not a case
+                    if 'case' not in item_str_normalized:
+                        increment_phone(model, count_num)
                     continue
 
                 # Check for "monitor" or "screen"
                 if 'monitor' in item_str_normalized or 'screen' in item_str_normalized:
                     increment_monitors(count_num)
-                    continue
-
-                # Phones: look for "phone" or "a32"/"a34"/"a35"
-                if 'phone' in item_str_normalized:
-                    # If it doesn't say "a32"/"a34"/"a35", default to A35
-                    phone_model_match = re.search(r'a3[245]', item_str_normalized)
-                    if phone_model_match:
-                        model = phone_model_match.group().upper()  # 'A35'
-                    else:
-                        model = 'A35'
-                    increment_phone(model, count_num)
-                    continue
-
-                # If it says "a32", "a34", or "a35" specifically (e.g. "Samsung A35s")
-                phone_model_match = re.search(r'a3[245]', item_str_normalized)
-                if phone_model_match:
-                    model = phone_model_match.group().upper()  # 'A35'
-                    # Also check if it says 'case' => we ignore phone cases
-                    if 'case' not in item_str_normalized:
-                        increment_phone(model, count_num)
                     continue
 
                 # Check for "bag"
@@ -166,7 +185,6 @@ def parse_warehouse_list(lines: list[str]) -> dict:
 
                 # Check for chargers
                 if 'charger' in item_str_normalized:
-                    # We'll just store the entire label to keep it simple
                     increment_charger(item_str_normalized, count_num)
                     continue
 
@@ -180,65 +198,18 @@ def parse_warehouse_list(lines: list[str]) -> dict:
                     increment_headset(item_str_normalized, count_num)
                     continue
 
-                # If we reach here, it's something we don't handle
-                # or an asset reference alone (which we skip per requirements).
+                # If it doesn't match any known category, handle as needed
                 pass
         else:
             # No match => handle if needed
             pass
 
     # Convert defaultdicts to regular dicts for a cleaner return object
-    counts['laptops'] = dict(counts['laptops'])
-    counts['phones'] = dict(counts['phones'])
+    counts['desktops'] = dict(counts['desktops'])      # [NEW]
+    counts['laptops'] = dict(counts['laptops'])        # [NEW]
+    counts['phones'] = dict(counts['phones'])          # [NEW]
     counts['bags'] = dict(counts['bags'])
     counts['chargers'] = dict(counts['chargers'])
     counts['headsets'] = dict(counts['headsets'])
 
     return counts
-
-
-# ------------------------------------------------------------------------------
-# EXAMPLE USAGE (if you were to run this module as a script)
-# ------------------------------------------------------------------------------
-if __name__ == "__main__":
-    example_lines = [
-        "X6 24” screens – MASH @ CJC",
-        "==",
-        "Inventory of Hardware Collected from warehouse  1 x 5540",
-        "  Asset details of devices collected (if required)     Asset 076975",
-        "==",
-        "X1 3000 - nhft-073807",
-        "==",
-        "4 x monitors",
-        "==",
-        "Inventory of Hardware Collected from warehouse  4 x 5340, 4 x small laptop bag, 1 x 100w usb-c charger",
-        # ...
-    ]
-    
-    parsed_results = parse_warehouse_list(example_lines)
-
-    print("RESULTS:")
-    print(f"  Monitors: {parsed_results['monitors']}")
-    print(f"  Desktops (3000): {parsed_results['desktops_3000']}")
-
-    print("  Laptops:")
-    for model, qty in parsed_results['laptops'].items():
-        print(f"    {model}: {qty}")
-
-    print("  Phones:")
-    for model, qty in parsed_results['phones'].items():
-        print(f"    {model}: {qty}")
-
-    print("  Bags:")
-    for bag_type, qty in parsed_results['bags'].items():
-        print(f"    {bag_type} bag: {qty}")
-
-    print("  Chargers:")
-    for charger_label, qty in parsed_results['chargers'].items():
-        print(f"    {charger_label}: {qty}")
-
-    print(f"  Docks: {parsed_results['docks']}")
-
-    print("  Headsets:")
-    for headset_label, qty in parsed_results['headsets'].items():
-        print(f"    {headset_label}: {qty}")
