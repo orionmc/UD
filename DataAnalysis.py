@@ -4,38 +4,31 @@ from collections import defaultdict
 from typing import List, Dict, Any
 
 def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Parses a list of email data dictionaries describing hardware collected from the warehouse.
-    Returns a dictionary with the counts of monitors, desktops, laptops, phones,
-    bags, chargers, docks, headsets, and a list of unparsable lines with sender and time details.
+    # Parses a list of email data dictionaries describing hardware collected from the warehouse.
+    # Returns a dictionary with the counts of items describet in the list, and a list of unparsable lines with sender and time stamp.
+    # param email_data: A list of dictionaries, each containing:
+    #   "body": str (email body)
+    #   "sender": str (sender's name or email)
+    #   "received_time": str (timestamp of when the email was received)
+    # return: A dictionary with aggregated counts per item category and a list of unparsable lines.
+    # Define lists for desktop, laptop, and phone models for flexibility and future tuning
+    DESKTOP_MODELS = ["3000", "3010"]  
+    LAPTOP_MODELS = ["5340", "5330", "5531", "5540", "5666"]  
+    PHONE_MODELS = ["A32", "A34", "A35"]  
 
-    :param email_data: A list of dictionaries, each containing:
-                       - "body": str (email body)
-                       - "sender": str (sender's name or email)
-                       - "received_time": str (timestamp of when the email was received)
-    :return: A dictionary with aggregated counts per item category and a list of unparsable lines.
-    """
-    
-    # [NEW] Define lists for desktop, laptop, and phone models for flexibility
-    DESKTOP_MODELS = ["3000", "3010"]  # Add or remove desktop models here
-    LAPTOP_MODELS = ["5340", "5330", "5531", "5540", "5666"]  # Add or remove laptop models here
-    PHONE_MODELS = ["A32", "A34", "A35"]  # Add or remove phone models here
-
-    # --------------------------------------------------------------------------
     # DATA STRUCTURES FOR FINAL COUNTS
-    # --------------------------------------------------------------------------
+
     counts = {
         'monitors': 0,                       # e.g., "4 x monitors", "X6 24” screens"
-
-        'desktops': defaultdict(int),        # [NEW] For recognized desktop models
-        'laptops': defaultdict(int),         # [NEW] For recognized laptop models
-        'phones': defaultdict(int),          # [NEW] For recognized phone models
+        'desktops': defaultdict(int),        # For recognized desktop models
+        'laptops': defaultdict(int),         # For recognized laptop models
+        'phones': defaultdict(int),          # For recognized phone models
         'bags': defaultdict(int),            # e.g., "small laptop bag", "large laptop bag"
         'chargers': defaultdict(int),        # e.g., "100w usb-c charger", "130w usb-c charger"
         'docks': 0,                          # Cumulative count of "dock"/"docking stn"
         'headsets': defaultdict(int),        # e.g., "5220 polywire headset"
 
-        'unparsable_lines': []               # [NEW] List to store entire unparsable lines with sender and time
+        'unparsable_lines': []               # List to store entire unparsable lines with sender and time
     }
 
     # --------------------------------------------------------------------------

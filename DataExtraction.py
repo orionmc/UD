@@ -48,7 +48,7 @@ def read_outlook_subfolder_stores(mailbox_display_name, subfolder_name):
     messages = subfolder.Items
     messages.Sort("[ReceivedTime]", True)
     
-    count_to_read = 5
+    count_to_read = 7
     email_data = []
     
     for i, msg in enumerate(messages, start=1):
