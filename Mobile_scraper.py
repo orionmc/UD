@@ -17,11 +17,11 @@ HEADERS = {
         "Chrome/85.0.4183.102 Safari/537.36"
     )
 }
-REQUEST_DELAY = 1  # Seconds between requests to respect rate limiting
+REQUEST_DELAY = 2  # Seconds between requests to respect rate limiting
 
 # Define Year Range
 YEAR_FROM = 2023
-YEAR_TO = datetime.now().year  # Present year
+YEAR_TO = datetime.now().year  
 
 # Define the specifications to extract with their corresponding data-spec attributes
 DESIRED_SPECS = {
@@ -34,23 +34,18 @@ DESIRED_SPECS = {
     'Weight': 'weight',
     'Dimension': 'dimensions'
 }
-
-def get_total_pages():
-    """
-    Determines the total number of pages for Apple phones.
-    """
+# Determines the total number of pages for Apple phones.
+def get_total_pages():  
     try:
         response = requests.get(APPLE_PHONES_URL, headers=HEADERS)
         response.raise_for_status()
     except requests.RequestException as e:
         print(f"Error fetching Apple phones page: {e}")
-        return 1  # Default to 1 to attempt at least the first page
-
+        return 1  
     soup = BeautifulSoup(response.text, 'html.parser')
     pagination = soup.find('div', class_='nav-pages')
     if not pagination:
-        return 1  # Only one page exists
-
+        return 1  
     pages = pagination.find_all('a')
     page_numbers = [int(page.text) for page in pages if page.text.isdigit()]
     if max(page_numbers) > 20 
@@ -58,10 +53,9 @@ def get_total_pages():
     else:
         return max(page_numbers) if page_numbers else 1
 
+# Retrieves all Apple phone model URLs from all pages.
 def get_apple_phone_links(total_pages):
-    """
-    Retrieves all Apple phone model URLs from all pages.
-    """
+
     phone_links = []
     for page in range(1, total_pages + 1):
         if page == 1:
@@ -89,41 +83,34 @@ def get_apple_phone_links(total_pages):
             full_url = urljoin(BASE_URL, href)
             phone_links.append(full_url)
         
-        time.sleep(REQUEST_DELAY)  # Respect rate limiting
+        time.sleep(REQUEST_DELAY) 
 
     return phone_links
 
+# Extracts the release year from a phone's specifications page.
 def extract_release_year(phone_soup):
-    """
-    Extracts the release year from a phone's specifications page.
-    Looks for <td class="nfo" data-spec="year">2024, October 15</td>
-    """
+        
     year_td = phone_soup.find('td', {'class': 'nfo', 'data-spec': 'year'})
     if year_td:
         text = year_td.get_text(separator=" ", strip=True)
-        # Extract the year using regex
         match = re.search(r'\b(20\d{2}|19\d{2})\b', text)
         if match:
             return int(match.group(0))
     return None
 
+# Retrieves the text value for a given data-spec attribute.
 def get_spec_value(phone_soup, data_spec):
-    """
-    Retrieves the text value for a given data-spec attribute.
-    """
+
     spec_td = phone_soup.find('td', {'class': 'nfo', 'data-spec': data_spec})
     if spec_td:
-        # Remove any HTML tags like <sup> or <a>
         for sup in spec_td.find_all(['sup', 'a']):
             sup.decompose()
         return spec_td.get_text(separator=" ", strip=True)
     return "N/A"
 
+# Fetches and parses the phone specifications from its GSMArena page.
 def get_specs(phone_url):
-    """
-    Fetches and parses the phone specifications from its GSMArena page.
-    Returns a dictionary of specifications.
-    """
+
     try:
         response = requests.get(phone_url, headers=HEADERS)
         response.raise_for_status()
@@ -134,33 +121,28 @@ def get_specs(phone_url):
     soup = BeautifulSoup(response.text, 'html.parser')
     specs = {}
 
-    # Extract phone name
     name_tag = soup.find('h1', class_='specs-phone-name-title')
     if name_tag:
         specs['Phone Name'] = name_tag.text.strip()
     else:
         specs['Phone Name'] = "Unknown"
 
-    # Extract release year
     release_year = extract_release_year(soup)
     specs['Release Year'] = release_year if release_year else "Unknown"
 
-    # Extract desired specifications
     for spec_name, data_spec in DESIRED_SPECS.items():
         spec_value = get_spec_value(soup, data_spec)
         specs[spec_name] = spec_value
 
     return specs
 
+# Displays the specifications in a table format.
 def display_specs_table(specs_list):
-    """
-    Displays the specifications in a table format.
-    """
+
     if not specs_list:
         print("No specifications to display.")
         return
 
-    # Define the table headers based on DESIRED_SPECS
     headers = ["Phone Name", "Release Year"] + list(DESIRED_SPECS.keys())
     table = []
 
@@ -212,7 +194,6 @@ def main():
     if not filtered_phones:
         print("No phones found in the specified range.")
     else:
-        # Save the specs to a JSON file
         output_filename = f"apple_phones_{YEAR_FROM}_{YEAR_TO}.json"
         try:
             with open(output_filename, 'w', encoding='utf-8') as f:
