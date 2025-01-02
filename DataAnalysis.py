@@ -34,8 +34,6 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         'unparsable_lines': []               
     }
 
-    # HELPER FUNCTIONS
-
     def normalize_item_name(item_name: str) -> str:
         #Lowercases and removes extra punctuation to help with matching.
         return re.sub(r'[^a-z0-9\s\-]+', '', item_name.lower()).strip()
@@ -225,7 +223,7 @@ def parse_emails(email_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                     increment_unparsable(line_clean, sender, received_time)
                     parsed = True
                 continue  
-            # Match category and model pattern, e.g., "Laptop 5666"
+            # Match category and model pattern, e.g., "Laptop 5330"
             match_category_model = re.match(pattern_category_model, line_clean, re.IGNORECASE)
             if match_category_model:
                 category, model = match_category_model.groups()

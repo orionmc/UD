@@ -70,3 +70,12 @@ def read_outlook_subfolder_stores(mailbox_display_name, subfolder_name):
     return email_data
 
 
+
+
+
+
+
+
+
+
+
