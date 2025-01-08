@@ -7,7 +7,6 @@ SIGNATURE_TRIGGERS = [
     "Sincerely",
     "Connor", 
     "Stuart", 
-    "Nihat",
     "Nelson",
     "Ronnie",
     "Michael",
