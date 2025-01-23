@@ -1,4 +1,3 @@
-# warehouse_parser.py
 import re
 from collections import defaultdict
 from typing import List, Dict, Any
